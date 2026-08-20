@@ -1,10 +1,12 @@
 using KlinickaStudieApp.Components;
+using KlinickaStudieApp.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.AddScoped<DataService>(); //tohle jsem pridal ja 
 
 var app = builder.Build();
 

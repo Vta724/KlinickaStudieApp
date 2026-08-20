@@ -27,7 +27,7 @@ namespace KlinickaStudieApp.Services
                 if (string.IsNullOrWhiteSpace(radek))
                 {
                     continue;
-                })
+                }
 
                 string[] sloupce = radek.Split(';');
                 var zaznam = new StudieZaznam
@@ -89,7 +89,7 @@ namespace KlinickaStudieApp.Services
                     nejcastejsi = polozka.Key;
                 }
             }
-            return nejcastejsi
+            return nejcastejsi;
         }
     }
 }

@@ -1,0 +1,158 @@
+﻿@page "/klinicka-studie"
+@rendermode InteractiveServer
+@inject DataService DataService
+@inject IJSRuntime JS
+
+<h1>Klinická studie – účinné látky</h1>
+
+@if (vsechnaData == null)
+{
+    <p>Načítám data...</p>
+}
+else
+{
+    <h2>Souhrnné statistiky (celý dataset)</h2>
+    <ul>
+        <li>Průměrné snížení symptomů (všichni pacienti): @prumerCelkem.ToString("F1") %</li>
+        <li>Průměrné snížení symptomů – skupina A (18–40 let): @prumerA.ToString("F1") %</li>
+        <li>Průměrné snížení symptomů – skupina B (60+ let): @prumerB.ToString("F1") %</li>
+        <li>Nejčastěji zkoumaná účinná látka: @nejcastejsiLatka</li>
+    </ul>
+
+    <hr />
+
+    <h2>Interaktivní graf</h2>
+
+    <p>
+        <label>
+            <input type="checkbox" @bind="zobrazitA" @bind:after="AktualizujGraf" />
+            Zobrazit skupinu A (18–40 let)
+        </label>
+    </p>
+    <p>
+        <label>
+            <input type="checkbox" @bind="zobrazitB" @bind:after="AktualizujGraf" />
+            Zobrazit skupinu B (60+ let)
+        </label>
+    </p>
+    <p>
+        <label>Minimální počet pacientů ve studii: @minimalniPocetPacientu</label>
+        <br />
+        <input type="range" min="0" max="600" step="10"
+               @bind="minimalniPocetPacientu" @bind:event="oninput" @bind:after="AktualizujGraf" />
+    </p>
+
+    <p>Zobrazeno záznamů: @filtrovanaData.Count</p>
+
+    <canvas id="hlavniGraf" width="600" height="400"></canvas>
+}
+
+@code {
+    private List<StudieZaznam>? vsechnaData;
+    private List<StudieZaznam> filtrovanaData = new();
+
+    private double prumerCelkem;
+    private double prumerA;
+    private double prumerB;
+    private string nejcastejsiLatka = "";
+
+    private bool zobrazitA = true;
+    private bool zobrazitB = true;
+    private int minimalniPocetPacientu = 0;
+
+    protected override void OnInitialized()
+    {
+        vsechnaData = DataService.Nacistdata();
+
+        prumerCelkem = DataService.Prumer(vsechnaData);
+        prumerA = DataService.Prumer(FiltrujPodleSkupiny(vsechnaData, "A"));
+        prumerB = DataService.Prumer(FiltrujPodleSkupiny(vsechnaData, "B"));
+        nejcastejsiLatka = DataService.Nejcastejsiucinnalatka(vsechnaData);
+
+        AktualizujFiltrovanaData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await VykresliGraf();
+        }
+    }
+
+    private List<StudieZaznam> FiltrujPodleSkupiny(List<StudieZaznam> data, string skupina)
+    {
+        var vysledek = new List<StudieZaznam>();
+        foreach (var zaznam in data)
+        {
+            if (zaznam.skupina == skupina)
+            {
+                vysledek.Add(zaznam);
+            }
+        }
+        return vysledek;
+    }
+
+    private void AktualizujFiltrovanaData()
+    {
+        var vysledek = new List<StudieZaznam>();
+
+        if (vsechnaData == null)
+        {
+            filtrovanaData = vysledek;
+            return;
+        }
+
+        foreach (var zaznam in vsechnaData)
+        {
+            bool skupinaVyhovuje = (zaznam.skupina == "A" && zobrazitA) || (zaznam.skupina == "B" && zobrazitB);
+            bool pocetVyhovuje = zaznam.pocetpacientu >= minimalniPocetPacientu;
+
+            if (skupinaVyhovuje && pocetVyhovuje)
+            {
+                vysledek.Add(zaznam);
+            }
+        }
+
+        filtrovanaData = vysledek;
+    }
+
+    private async Task AktualizujGraf()
+    {
+        AktualizujFiltrovanaData();
+        await VykresliGraf();
+    }
+
+    private async Task VykresliGraf()
+    {
+        // Prumer Snizeni_symptomu pro kazdou ucinnou latku ve filtrovanych datech
+        var soucty = new Dictionary<string, double>();
+        var pocty = new Dictionary<string, int>();
+
+        foreach (var zaznam in filtrovanaData)
+        {
+            if (!soucty.ContainsKey(zaznam.ucinnalatka))
+            {
+                soucty[zaznam.ucinnalatka] = 0;
+                pocty[zaznam.ucinnalatka] = 0;
+            }
+
+            soucty[zaznam.ucinnalatka] = soucty[zaznam.ucinnalatka] + zaznam.snizenisymptomu;
+            pocty[zaznam.ucinnalatka] = pocty[zaznam.ucinnalatka] + 1;
+        }
+
+        var popisky = new List<string>();
+        var hodnoty = new List<double>();
+
+        foreach (var polozka in soucty)
+        {
+            string latka = polozka.Key;
+            double prumer = polozka.Value / pocty[latka];
+
+            popisky.Add(latka);
+            hodnoty.Add(Math.Round(prumer, 1));
+        }
+
+        await JS.InvokeVoidAsync("vykresliGraf", popisky, hodnoty);
+    }
+}
